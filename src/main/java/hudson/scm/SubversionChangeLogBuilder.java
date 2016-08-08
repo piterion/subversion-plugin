@@ -23,41 +23,44 @@
  */
 package hudson.scm;
 
-import hudson.EnvVars;
-import hudson.model.AbstractBuild;
-import hudson.model.BuildListener;
-import hudson.scm.SubversionSCM.ModuleLocation;
-import hudson.FilePath;
-import hudson.util.IOException2;
-import hudson.remoting.VirtualChannel;
-import hudson.FilePath.FileCallable;
-import hudson.model.Run;
-import hudson.model.TaskListener;
-import org.kohsuke.accmod.Restricted;
-import org.kohsuke.accmod.restrictions.NoExternalUse;
-import org.tmatesoft.svn.core.SVNException;
-import org.tmatesoft.svn.core.SVNURL;
-import org.tmatesoft.svn.core.ISVNLogEntryHandler;
-import org.tmatesoft.svn.core.SVNLogEntry;
-import org.tmatesoft.svn.core.auth.ISVNAuthenticationProvider;
-import org.tmatesoft.svn.core.wc.SVNClientManager;
-import org.tmatesoft.svn.core.wc.SVNLogClient;
-import org.tmatesoft.svn.core.wc.SVNRevision;
-import org.tmatesoft.svn.core.wc.SVNWCClient;
-import org.tmatesoft.svn.core.wc.SVNInfo;
-import org.xml.sax.helpers.LocatorImpl;
+import java.io.File;
+import java.io.IOException;
+import java.io.PrintStream;
+import java.io.Serializable;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Map;
 
+import javax.annotation.Nonnull;
 import javax.xml.transform.Result;
 import javax.xml.transform.TransformerConfigurationException;
 import javax.xml.transform.sax.SAXTransformerFactory;
 import javax.xml.transform.sax.TransformerHandler;
-import java.io.IOException;
-import java.io.PrintStream;
-import java.io.File;
-import java.io.Serializable;
-import java.util.Map;
-import java.util.Collection;
-import javax.annotation.Nonnull;
+
+import org.kohsuke.accmod.Restricted;
+import org.kohsuke.accmod.restrictions.NoExternalUse;
+import org.tmatesoft.svn.core.ISVNLogEntryHandler;
+import org.tmatesoft.svn.core.SVNException;
+import org.tmatesoft.svn.core.SVNLogEntry;
+import org.tmatesoft.svn.core.SVNURL;
+import org.tmatesoft.svn.core.auth.ISVNAuthenticationProvider;
+import org.tmatesoft.svn.core.wc.SVNClientManager;
+import org.tmatesoft.svn.core.wc.SVNInfo;
+import org.tmatesoft.svn.core.wc.SVNLogClient;
+import org.tmatesoft.svn.core.wc.SVNRevision;
+import org.tmatesoft.svn.core.wc.SVNWCClient;
+import org.xml.sax.helpers.LocatorImpl;
+
+import hudson.EnvVars;
+import hudson.FilePath;
+import hudson.FilePath.FileCallable;
+import hudson.model.AbstractBuild;
+import hudson.model.BuildListener;
+import hudson.model.Run;
+import hudson.model.TaskListener;
+import hudson.remoting.VirtualChannel;
+import hudson.scm.SubversionSCM.ModuleLocation;
+import hudson.util.IOException2;
 
 /**
  * Builds <tt>changelog.xml</tt> for {@link SubversionSCM}.
@@ -83,7 +86,8 @@ public final class SubversionChangeLogBuilder {
     /**
      * @deprecated 1.34
      */
-    public SubversionChangeLogBuilder(AbstractBuild<?,?> build, BuildListener listener, SubversionSCM scm) throws IOException {
+    @Deprecated
+	public SubversionChangeLogBuilder(AbstractBuild<?,?> build, BuildListener listener, SubversionSCM scm) throws IOException {
         this(build, build.getWorkspace(), build.getPreviousBuild().getAction(SVNRevisionState.class), null, listener, scm);
     }
 
@@ -91,8 +95,10 @@ public final class SubversionChangeLogBuilder {
      * @since  1.34
      */
     public SubversionChangeLogBuilder(Run<?,?> build, FilePath workspace, @Nonnull SVNRevisionState baseline, EnvVars env, TaskListener listener, SubversionSCM scm) throws IOException {
-        previousRevisions = baseline.revisions;
-        thisRevisions     = scm.parseSvnRevisionFile(build);
+		thisRevisions = scm.parseSvnRevisionFile(build);
+		// dont trust the baseline
+		previousRevisions = findBaseLine(build);
+    	
         this.listener = listener;
         this.scm = scm;
         this.build = build;
@@ -100,6 +106,29 @@ public final class SubversionChangeLogBuilder {
         this.env = env;
     }
 
+    private  Map<String,Long> findBaseLine(Run<?,?> build) {
+		if (build instanceof AbstractBuild) {
+			AbstractBuild<?, ?> prev = ((AbstractBuild) build).getPreviousBuild();
+			if (prev != null) {
+				SVNRevisionState base = prev.getAction(SVNRevisionState.class);
+				// check whether previous build contains the same svn url
+				// basically looking for a previous build on the same branch
+				boolean urlfound = true;
+				for (String url : thisRevisions.keySet()) {
+					if (!base.revisions.containsKey(url)) {
+						urlfound = false;
+					}
+				}
+				if (urlfound) {
+					return base.revisions;
+				} else {
+					return findBaseLine(prev);
+				}
+			}
+    	 }
+		return new HashMap<String, Long>();
+    }
+    
     public boolean run(Collection<SubversionSCM.External> externals, Result changeLog) throws IOException, InterruptedException {
         boolean changelogFileCreated = false;
 
@@ -181,9 +210,10 @@ public final class SubversionChangeLogBuilder {
 
         logHandler.setContext(context);
         try {
-            if(debug)
-                listener.getLogger().printf("Computing changelog of %1s from %2s to %3s%n",
+            if(debug) {
+				listener.getLogger().printf("Computing changelog of %1s from %2s to %3s%n",
                         SVNURL.parseURIEncoded(url), prevRev+1, thisRev);
+			}
             svnlc.doLog(SVNURL.parseURIEncoded(url),
                         null,
                         SVNRevision.UNDEFINED,
@@ -193,8 +223,9 @@ public final class SubversionChangeLogBuilder {
                         true, // Report paths.
                         0, // Retrieve log entries for unlimited number of revisions.
                         debug ? new DebugSVNLogHandler(logHandler) : logHandler);
-            if(debug)
-                listener.getLogger().println("done");
+            if(debug) {
+				listener.getLogger().println("done");
+			}
         } catch (SVNException e) {
             throw new IOException2("revision check failed on "+url,e);
         }
@@ -211,7 +242,8 @@ public final class SubversionChangeLogBuilder {
             this.core = core;
         }
 
-        public void handleLogEntry(SVNLogEntry logEntry) throws SVNException {
+        @Override
+		public void handleLogEntry(SVNLogEntry logEntry) throws SVNException {
             listener.getLogger().println("SVNLogEntry="+logEntry);
             core.handleLogEntry(logEntry);
         }
@@ -246,7 +278,8 @@ public final class SubversionChangeLogBuilder {
             this.authProvider = authProvider;
         }
 
-        public PathContext invoke(File p, VirtualChannel channel) throws IOException {
+        @Override
+		public PathContext invoke(File p, VirtualChannel channel) throws IOException {
             final SvnClientManager manager = SubversionSCM.createClientManager(authProvider);
             try {
                 final SVNWCClient svnwc = manager.getWCClient();
