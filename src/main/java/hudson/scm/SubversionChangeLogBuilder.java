@@ -113,10 +113,10 @@ public final class SubversionChangeLogBuilder {
 				SVNRevisionState base = prev.getAction(SVNRevisionState.class);
 				// check whether previous build contains the same svn url
 				// basically looking for a previous build on the same branch
-				boolean urlfound = true;
+				boolean urlfound = false;
 				for (String url : thisRevisions.keySet()) {
-					if (base!=null && base.revisions!=null && !base.revisions.containsKey(url)) {
-						urlfound = false;
+					if (base!=null && base.revisions!=null && base.revisions.containsKey(url)) {
+						urlfound = true;
 					}
 				}
 				if (urlfound) {
