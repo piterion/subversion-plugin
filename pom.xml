@@ -32,7 +32,7 @@ THE SOFTWARE.
   </parent>
 
   <artifactId>subversion</artifactId>
-  <version>2.5.5b</version>
+  <version>2.5.5c</version>
   <packaging>hpi</packaging>
 
   <name>Jenkins Subversion Plug-in</name>
