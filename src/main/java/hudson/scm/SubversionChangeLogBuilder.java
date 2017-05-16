@@ -115,7 +115,7 @@ public final class SubversionChangeLogBuilder {
 				// basically looking for a previous build on the same branch
 				boolean urlfound = true;
 				for (String url : thisRevisions.keySet()) {
-					if (!base.revisions.containsKey(url)) {
+					if (base!=null && base.revisions!=null && !base.revisions.containsKey(url)) {
 						urlfound = false;
 					}
 				}
@@ -317,4 +317,4 @@ public final class SubversionChangeLogBuilder {
         public String moduleWorkspacePath;  // path to module root relative from workspace root
         private static final long serialVersionUID = 1L;
     }
-}
+} 
